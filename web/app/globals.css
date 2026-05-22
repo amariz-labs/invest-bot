@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Design tokens. Mirrored from ../design/code/tokens.css — kept inline here so
+ * the web/ project is self-contained (no cross-package imports).
+ * Source of truth for visual changes: ../design/DASHBOARD-BRIEF.md §1.
+ * --------------------------------------------------------------------------- */
+
+:root[data-theme="dark"] {
+  /* Surfaces */
+  --bg:                 240 22%  6%;
+  --surface:            240 17%  9%;
+  --surface-elevated:   240 12% 11%;
+  --border-subtle:      0 0% 100% / 0.06;
+  --border-strong:      0 0% 100% / 0.10;
+
+  /* Content */
+  --content-primary:    0 0% 100% / 0.96;
+  --content-secondary:  0 0% 100% / 0.72;
+  --content-tertiary:   0 0% 100% / 0.65;  /* raised from 0.55 for AAA over dark surfaces */
+
+  /* Accent (violet) */
+  --accent-50:  255 92% 95%;
+  --accent-100: 252 95% 85%;
+  --accent-200: 255 92% 76%;
+  --accent-300: 258 90% 66%;   /* brand */
+  --accent-400: 262 83% 58%;
+  --accent-500: 263 70% 50%;   /* bloom core */
+  --accent-600: 263 69% 35%;
+
+  /* Semantic */
+  --success: 142 71% 45%;
+  --danger:  0   84% 60%;
+  --warning: 41  96% 54%;
+  --focus-ring: 255 92% 76%;
+}
+
+/* Default <html> to dark for first paint (avoids FOUC). */
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background-color: hsl(var(--bg));
+  color: hsl(var(--content-primary));
+}
+
+/* Violet bloom — absolutely-positioned <div class="bloom"> in the hero zone. */
+.bloom {
+  position: absolute;
+  inset: -20% -10% auto auto;
+  width: 70vw;
+  aspect-ratio: 1;
+  background: radial-gradient(closest-side,
+    hsl(var(--accent-300) / 0.55) 0%,
+    hsl(var(--accent-500) / 0.35) 35%,
+    hsl(var(--bg) / 0)            70%);
+  filter: blur(80px) saturate(140%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  will-change: transform;
+  animation: bloom-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes bloom-drift {
+  from { transform: translate3d(-4%, -2%, 0) rotate(0deg); }
+  to   { transform: translate3d( 4%,  2%, 0) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloom { animation: none; }
+}
+
+/* Tabular numerics for any element rendering data */
+.num {
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Dual-ring focus indicator for elements that may sit over the bloom. */
+.focus-on-bloom:focus-visible {
+  outline: 2px solid hsl(0 0% 100%);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px hsl(var(--accent-200) / 0.8);
+}
+
+/* Utility helpers Tailwind v4 picks up via the colors plugin. */
+.bg-bg { background-color: hsl(var(--bg)); }
+.bg-surface { background-color: hsl(var(--surface)); }
+.bg-surface-elevated { background-color: hsl(var(--surface-elevated)); }
+.text-content-primary { color: hsl(var(--content-primary)); }
+.text-content-secondary { color: hsl(var(--content-secondary)); }
+.text-content-tertiary { color: hsl(var(--content-tertiary)); }
+.border-subtle { border-color: hsl(var(--border-subtle)); }
+.border-strong { border-color: hsl(var(--border-strong)); }
+.text-success { color: hsl(var(--success)); }
+.text-danger { color: hsl(var(--danger)); }
+.text-warning { color: hsl(var(--warning)); }
+.text-accent-300 { color: hsl(var(--accent-300)); }
