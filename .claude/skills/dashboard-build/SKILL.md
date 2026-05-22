@@ -13,6 +13,10 @@ User wants an interactive UI to browse trades, portfolios, or backtests. For a s
 - [`squadbase/streamlit-claude-code-starter`](https://github.com/squadbase/streamlit-claude-code-starter) — template.
 - Optional: [`danielrosehill/Claude-Data-Visualisation-And-Publishing-Plugin`](https://github.com/danielrosehill/Claude-Data-Visualisation-And-Publishing-Plugin) for non-Streamlit (Plotly/Bokeh/ECharts).
 
+# Voltrex-grade reference (Next.js + Tailwind + Lightweight Charts path)
+
+When the user wants a polished web dashboard (not a Streamlit BI app), read [`../../../design/DASHBOARD-BRIEF.md`](../../../design/DASHBOARD-BRIEF.md) first and reuse the components in [`../../../design/code/`](../../../design/code/) — `tokens.ts`, `tokens.css`, `LeaderCard.tsx`, `LockSlider.tsx`, `AnimatedNumber.tsx`, `HeroChart.tsx`. The brief is the synthesis of an 11-agent design teardown (Nixtio "Voltrex" Dribbble, May 2026); the visual-audit companion in `design/VISUAL-AUDIT.md` documents the data-integrity bugs to avoid copying.
+
 # Recipe
 
 ```
