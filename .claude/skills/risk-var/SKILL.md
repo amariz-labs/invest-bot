@@ -43,3 +43,7 @@ uvx --with empyrical-reloaded --with arch --with pandas python -c "import arch"
 - Don't quote a single "VaR number" without naming the method — methods can differ by 3×.
 - Don't extrapolate daily VaR to annual with √252 if returns are non-iid — use the GARCH path.
 - Don't use `mlfinlab` for advanced risk — it requires a commercial license.
+
+# Credits
+
+- [agiprolabs/claude-trading-skills](https://github.com/agiprolabs/claude-trading-skills) — adjacent VaR + Kelly tooling (crypto-first).

@@ -7,6 +7,7 @@ The repo doubles as a Claude Code **skills pack**: drop the `.claude/skills/` fo
 ## What's here
 
 - [`SKILLS.md`](./SKILLS.md) — exhaustive categorized catalog of open-source repos and Claude Code skills relevant to trading, quant finance, dashboards, GitHub workflow, and trading psychology. Compiled from a 10-agent research sweep of the 2026 ecosystem.
+- [`FAVOURITE-REPOS.md`](./FAVOURITE-REPOS.md) — curated favourites list: the 8 user-pinned anchors (vinta/awesome-python, awesome-selfhosted, the-book-of-secret-knowledge, sindresorhus/awesome, FinceptTerminal, codegraph, oh-my-pi, anthropics/claude-plugins-official) plus our peer trading-skills packs, with PORT / LINK / CHAIN / PARK / META verdicts.
 - [`design/`](./design/) — Voltrex-grade dashboard design pack:
   - [`DASHBOARD-BRIEF.md`](./design/DASHBOARD-BRIEF.md) — visual system, tokens, charts, IA, motion, a11y/perf/i18n (the universal layer)
   - [`EQUITIES-DASHBOARD.md`](./design/EQUITIES-DASHBOARD.md) — equities/ETF/index-specific adaptation (order ticket, PDT, wash-sale, sessions)
@@ -14,9 +15,10 @@ The repo doubles as a Claude Code **skills pack**: drop the `.claude/skills/` fo
   - [`PLATFORM-INTEGRATIONS.md`](./design/PLATFORM-INTEGRATIONS.md) — broker + data-source integration matrix and abstract adapters
   - [`VISUAL-AUDIT.md`](./design/VISUAL-AUDIT.md) — direct pixel-level critique of the Nixtio reference
   - [`code/`](./design/code/) — ready-to-paste TS/React: tokens, BrokerAdapter, DataAdapter, HeroChart, LeaderCard, LockSlider, AnimatedNumber, TVEmbed
-- [`.claude/skills/`](./.claude/skills/) — **33 SKILL.md entries** covering quant analytics, portfolio, strategy R&D, options, tax, data, dashboards, TradingView/broker integration, and trading discipline.
+- [`.claude/skills/`](./.claude/skills/) — **35 SKILL.md entries** covering quant analytics, portfolio, strategy R&D, options, tax, data, dashboards, TradingView/broker integration, code-graph indexing, and trading discipline.
 - [`web/`](./web/) — runnable Next.js 15 host scaffold (App Router, Tailwind v4, UDF endpoint for TradingView Charting Library, hardened tv-webhook receiver). 32 files; `cd web && npm install && npm run dev` to boot.
 - [`design/code/adapters/`](./design/code/adapters/) — 7 concrete adapters: `Synthetic` (in-memory paper broker for backtests + tests), `Alpaca`, `IBKR`, `Tradier`, `Polygon`, `YFinance`, `TwelveData`.
+- [`mcp/`](./mcp/) — MCP server exposing BrokerAdapter + DataAdapter as tools, for external agents (Cursor, Claude Desktop, Codex).
 
 ## Skill categories
 
@@ -24,7 +26,8 @@ The repo doubles as a Claude Code **skills pack**: drop the `.claude/skills/` fo
 - **Portfolio & planning** — `portfolio-optimize`, `retire-fire`, `debt-payoff`
 - **Strategy R&D** — `backtest-runner`, `smc-scan`, `pine-new`, `pine-to-python`, `chart-render`, `sentiment-scan`
 - **Equities-specific** — `equities-screener`, `etf-analyzer`, `daily-routine`
-- **Options** — `options-chain`, `options-strategy-builder`, `greeks-monitor`
+- **Options** — `options-chain`, `options-strategy-builder`, `greeks-monitor`, `iv-surface`
+- **Dev tooling** — `code-map` (codegraph wrapper for refactors)
 - **Tax** — `tax-loss-harvest`
 - **Data & dashboards** — `market-data`, `dashboard-build`, `tradingview-embed`
 - **Integrations** — `alert-webhook`, `broker-connect`

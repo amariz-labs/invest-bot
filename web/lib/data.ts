@@ -3,7 +3,7 @@
 // production stack splits these (Polygon for live, yfinance for history).
 // See PLATFORM-INTEGRATIONS.md.
 
-import type { DataAdapter, Bar, Quote, SymbolInfo } from "@/lib/types";
+import type { DataAdapter, Bar, Quote, SymbolInfo, ConnectionStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Placeholder data adapter — deterministic, no network. Bars are a simple
@@ -107,6 +107,23 @@ class PlaceholderDataAdapter implements DataAdapter {
 
   async ping() {
     return { ok: true as const, latencyMs: 0 };
+  }
+
+  // Intentional placeholder behavior: we emit a single "connected" event
+  // synchronously and never change state. Concrete adapters (Polygon,
+  // TwelveData, YFinance) replace this with real WS / REST heartbeat
+  // logic — see design/code/adapters/README.md "Connection status protocol".
+  // Returning a no-op unsubscribe keeps the consumer cleanup path uniform.
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void {
+    const status: ConnectionStatus = { state: "connected", since: Date.now() };
+    try { handler(status); } catch { /* ignore handler errors */ }
+    return () => { /* no-op — placeholder never transitions */ };
+  }
+
+  // Placeholder: every symbol is "freshly ticked right now". The real
+  // adapter tracks the unix-ms timestamp of each incoming quote.
+  lastTickAt(_symbol: string): number | null {
+    return Date.now();
   }
 }
 

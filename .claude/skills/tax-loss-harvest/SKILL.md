@@ -118,3 +118,7 @@ uvx --with pyyaml --with pandas --with python-dateutil python -c "import pandas,
 - **Don't** suppress the disclaimer. Every emitted report begins with the NOT-TAX-ADVICE line.
 - **Don't** omit the IRA cross-account check. Rev. Rul. 2008-5 is the single most-missed rule and the one with no basis-restoration remedy.
 - **Don't** assume FIFO. If broker default isn't specific-lot-ID, surface that — it changes which lots get sold.
+
+# Credits
+
+- [agiprolabs/claude-trading-skills](https://github.com/agiprolabs/claude-trading-skills) — adjacent Tax & Compliance toolkit (crypto-flavored under 2025 US rules); our cross-account IRA logic (Rev. Rul. 2008-5) is the distinct piece.

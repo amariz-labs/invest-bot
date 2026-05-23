@@ -78,3 +78,8 @@ uvx --with opstrat --with py_vollib --with QuantLib-Python --with pandas --with 
 - Don't quote `probProfit` as "win rate" — it's a one-touch probability of finishing OTM at expiration; the position can still be a loser intra-life. Label it "POP at expiration".
 - Don't use the European-style BS price as the *exit* value for an American short — it understates assignment risk near dividends.
 - Don't ignore commissions and the bid-ask spread in `maxProfit` — show net-of-fills numbers when source has them.
+
+# Credits
+
+- [agiprolabs/claude-trading-skills](https://github.com/agiprolabs/claude-trading-skills) — Black-Scholes / binomial / MC pricing (crypto-flavored).
+- [staskh/trading_skills](https://github.com/staskh/trading_skills) — options-advisor sibling.

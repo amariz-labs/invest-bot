@@ -5,10 +5,15 @@
 // Docs: https://twelvedata.com/docs
 
 import {
-  DataAdapter, Bar, Quote, SymbolInfo, Resolution,
+  DataAdapter, Bar, Quote, SymbolInfo, Resolution, ConnectionStatus,
 } from "../DataAdapter";
 import { DataError, num } from "./errors";
 import { SerialQueue } from "./queue";
+
+const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 30_000];
+const MAX_RECONNECT_ATTEMPTS = 8;
+const STALE_QUIET_MS = 15_000;
+const REFETCH_DEBOUNCE_MS = 500;
 
 export interface TwelveDataConfig {
   apiKey: string;
@@ -29,6 +34,15 @@ export class TwelveDataDataAdapter implements DataAdapter {
   private queue: SerialQueue;
   private rateState = { limit: 8, remaining: 8, resetAt: 0 };
 
+  // Connection-status bookkeeping. See PolygonDataAdapter for the protocol
+  // — same shape, same backoff, same stale-quiet threshold.
+  private status: ConnectionStatus = { state: "disconnected", since: Date.now() };
+  private statusSubscribers = new Set<(s: ConnectionStatus) => void>();
+  private lastTickPerSymbol = new Map<string, number>();
+  private staleTimer: ReturnType<typeof setTimeout> | null = null;
+  private liveSymbols = new Set<string>();
+  private refetchTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(cfg: TwelveDataConfig) {
     if (!cfg.apiKey) throw new DataError("twelvedata", "config", "TWELVEDATA_KEY is required");
     this.apiKey = cfg.apiKey;
@@ -37,6 +51,54 @@ export class TwelveDataDataAdapter implements DataAdapter {
   }
 
   get rateLimit() { return { ...this.rateState }; }
+
+  // ---- connection status -----------------------------------------------
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void {
+    this.statusSubscribers.add(handler);
+    try { handler(this.status); } catch { /* handler owns its errors */ }
+    return () => { this.statusSubscribers.delete(handler); };
+  }
+
+  lastTickAt(symbol: string): number | null {
+    const t = this.lastTickPerSymbol.get(symbol);
+    return typeof t === "number" ? t : null;
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    if (next.state === this.status.state &&
+        (next as { attempts?: number }).attempts === (this.status as { attempts?: number }).attempts) {
+      return;
+    }
+    this.status = next;
+    for (const h of this.statusSubscribers) {
+      try { h(next); } catch { /* keep going */ }
+    }
+  }
+
+  private armStaleTimer(): void {
+    if (this.staleTimer) clearTimeout(this.staleTimer);
+    this.staleTimer = setTimeout(() => {
+      if (this.status.state === "connected") {
+        const lastTick = Math.max(0, ...Array.from(this.lastTickPerSymbol.values()));
+        this.setStatus({ state: "stale", since: Date.now(), lastTickAt: lastTick || undefined });
+      }
+    }, STALE_QUIET_MS);
+  }
+
+  // After reconnect, re-fetch the latest daily bar for every live symbol so
+  // consumers' prevClose / dayΔ correct themselves. Debounced.
+  private scheduleReconnectRefetch(): void {
+    if (this.refetchTimer) return;
+    this.refetchTimer = setTimeout(async () => {
+      this.refetchTimer = null;
+      const now = Math.floor(Date.now() / 1000);
+      const from = now - 3 * 86_400;
+      for (const sym of this.liveSymbols) {
+        try { await this.getBars({ symbol: sym, resolution: "D", from, to: now }); }
+        catch { /* best-effort */ }
+      }
+    }, REFETCH_DEBOUNCE_MS);
+  }
 
   async getBars(opts: { symbol: string; resolution: Resolution; from: number; to: number }): Promise<Bar[]> {
     return this.call("getBars", async () => {
@@ -77,30 +139,83 @@ export class TwelveDataDataAdapter implements DataAdapter {
     });
   }
 
+  // Twelve Data WS: wss://ws.twelvedata.com/v1/quotes/price?apikey=...
+  // See PolygonDataAdapter for the reconnect / stale / refetch protocol;
+  // this is the same logic adapted to TD's frame shape. On reconnect we
+  // re-fetch the latest daily bar for each live symbol (debounced).
   streamQuotes(symbols: string[], handler: (q: Quote) => void): () => void {
-    // Twelve Data WS: wss://ws.twelvedata.com/v1/quotes/price?apikey=...
+    for (const s of symbols) this.liveSymbols.add(s);
+
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const WebSocket = require("ws");
-    const ws = new WebSocket(`wss://ws.twelvedata.com/v1/quotes/price?apikey=${this.apiKey}`);
-    ws.on("open", () => {
-      ws.send(JSON.stringify({ action: "subscribe", params: { symbols: symbols.join(",") } }));
-    });
-    ws.on("message", (raw: Buffer) => {
-      try {
-        const m = JSON.parse(raw.toString());
-        if (m.event !== "price") return;
-        handler({
-          symbol: m.symbol,
-          bid: num(m.price),
-          bidSize: 0,
-          ask: num(m.price),
-          askSize: 0,
-          last: num(m.price),
-          timestamp: num(m.timestamp) * 1000 || Date.now(),
-        });
-      } catch { /* ignore malformed frames */ }
-    });
-    return () => { try { ws.close(); } catch { /* idempotent */ } };
+    let ws: any = null;
+    let closedByCaller = false;
+    let attempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const dial = (): void => {
+      if (closedByCaller) return;
+      ws = new WebSocket(`wss://ws.twelvedata.com/v1/quotes/price?apikey=${this.apiKey}`);
+
+      ws.on("open", () => {
+        attempts = 0;
+        ws.send(JSON.stringify({ action: "subscribe", params: { symbols: symbols.join(",") } }));
+        this.setStatus({ state: "connected", since: Date.now() });
+        this.armStaleTimer();
+        this.scheduleReconnectRefetch();
+      });
+
+      ws.on("message", (raw: Buffer) => {
+        try {
+          const m = JSON.parse(raw.toString());
+          if (m.event !== "price") return;
+          const ts = num(m.timestamp) * 1000 || Date.now();
+          this.lastTickPerSymbol.set(m.symbol, ts);
+          if (this.status.state === "stale") {
+            this.setStatus({ state: "connected", since: Date.now() });
+          }
+          this.armStaleTimer();
+          handler({
+            symbol: m.symbol,
+            bid: num(m.price),
+            bidSize: 0,
+            ask: num(m.price),
+            askSize: 0,
+            last: num(m.price),
+            timestamp: ts,
+          });
+        } catch { /* ignore malformed frames */ }
+      });
+
+      ws.on("close", () => {
+        if (closedByCaller) return;
+        if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+          this.setStatus({
+            state: "disconnected",
+            since: Date.now(),
+            error: `gave up after ${attempts} reconnect attempts`,
+          });
+          return;
+        }
+        attempts++;
+        this.setStatus({ state: "reconnecting", since: Date.now(), attempts });
+        const wait = BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)] as number;
+        reconnectTimer = setTimeout(dial, wait);
+      });
+
+      ws.on("error", (err: Error) => { void err; });
+    };
+
+    dial();
+
+    return () => {
+      closedByCaller = true;
+      for (const s of symbols) this.liveSymbols.delete(s);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (this.staleTimer) { clearTimeout(this.staleTimer); this.staleTimer = null; }
+      try { ws?.close(); } catch { /* idempotent */ }
+      this.setStatus({ state: "disconnected", since: Date.now() });
+    };
   }
 
   async getSymbol(symbol: string): Promise<SymbolInfo> {

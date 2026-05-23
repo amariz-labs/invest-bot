@@ -58,3 +58,7 @@ uvx --with streamlit --with plotly --with pyarrow --with lightweight-charts pyth
 - Don't fetch from APIs inside the dashboard render path — load from `data/` parquet only. Decouple ingestion from presentation.
 - Don't store credentials in the page files — `st.secrets` only.
 - Don't auto-deploy publicly — the dashboards expose personal trade data.
+
+# Credits
+
+- [streamlit/agent-skills](https://github.com/streamlit/agent-skills) — Streamlit's own meta-skill for agent-driven app dev.
