@@ -37,6 +37,14 @@ What each subcommand emits:
 - `surface` — fitted SVI surface as a 2D heatmap (DTE x moneyness).
 - `watch` — interval loop; pings via `lib/notify.ts` when IV rank crosses `--rank-threshold` (rising or falling).
 
+## 0DTE handling — the user-owned decision, now committed
+
+**Default: 0DTE contracts (DTE < 1) are EXCLUDED from every aggregate** — term-structure, skew, SVI surface, and the ATM-IV time series. Reason: 0DTE is gamma-dominated and effectively pure-pin-risk; its IV is mechanically inflated by hours-to-expiry and distorts term-slope by 5–15 vol points. Including it makes the front of the curve look chronically backwardated when it isn't.
+
+To opt in, pass `--include-0dte`. When set, 0DTE values are bucketed and reported on a **separate** lane labeled "0DTE" rather than blended into the 1–7 DTE bucket. The ATM-IV time series still gets a `0dte_iv` column written next to `iv`, never merged.
+
+If you only care about 0DTE (intraday gamma trading), use `--only-0dte` — produces a focused surface restricted to the same-day chain. This mode skips the 52-week rank/percentile (no comparable history).
+
 Default path:
 
 ```python
@@ -104,4 +112,4 @@ uvx --with py_vollib --with arch --with pandas --with scipy --with matplotlib \
 - Don't compute IV percentile with less than 252 trading days of history — backfill or skip the metric.
 - Don't trust yfinance's option IVs — pull underlying close from yfinance if you must, but recompute IV from the chain via `py_vollib`.
 - Don't conflate IV rank with IV percentile — they answer different questions (range-position vs frequency-below). Show both side by side.
-- Don't lump 0DTE into the 30-DTE surface — it's a different beast (gamma-dominated, no vega); bucket separately or exclude.
+- Don't lump 0DTE into the 30-DTE surface — see the "0DTE handling" section above. Default is **exclude**; `--include-0dte` puts it on its own lane; never blend.

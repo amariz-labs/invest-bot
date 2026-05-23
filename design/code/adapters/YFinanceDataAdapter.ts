@@ -17,10 +17,15 @@
 // =====================================================================
 
 import {
-  DataAdapter, Bar, Quote, SymbolInfo, Resolution,
+  DataAdapter, Bar, Quote, SymbolInfo, Resolution, ConnectionStatus,
 } from "../DataAdapter";
 import { DataError, num } from "./errors";
 import { SerialQueue } from "./queue";
+
+// REST-only adapter: each successful call counts as a heartbeat. If the
+// bridge goes >60s without a successful call we flip to "stale". On the
+// next success we flip back to "connected".
+const REST_STALE_MS = 60_000;
 
 export interface YFinanceConfig {
   bridgeUrl?: string;  // default "/api/yfinance"
@@ -42,10 +47,65 @@ export class YFinanceDataAdapter implements DataAdapter {
   private fetchImpl: typeof fetch;
   private queue = new SerialQueue({ minSpacingMs: 200 }); // Yahoo throttles aggressively
 
+  // Connection-status bookkeeping. REST adapters have no real socket —
+  // we treat each successful bridge call as a heartbeat and let a single
+  // setInterval flip the state to "stale" if calls go quiet.
+  private status: ConnectionStatus = { state: "disconnected", since: Date.now() };
+  private statusSubscribers = new Set<(s: ConnectionStatus) => void>();
+  private lastTickPerSymbol = new Map<string, number>();
+  private lastHeartbeat = 0;
+  private heartbeatWatcher: ReturnType<typeof setInterval> | null = null;
+
   constructor(cfg: YFinanceConfig = {}) {
     this.bridgeUrl = cfg.bridgeUrl ?? "/api/yfinance";
     this.fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as typeof fetch);
     if (!this.fetchImpl) throw new DataError("yfinance", "config", "fetch is not available; pass fetchImpl in config");
+  }
+
+  // ---- connection status -----------------------------------------------
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void {
+    this.statusSubscribers.add(handler);
+    // Lazy-start the heartbeat watcher on first subscribe so adapters
+    // created for one-off REST calls don't keep timers alive.
+    if (!this.heartbeatWatcher) {
+      this.heartbeatWatcher = setInterval(() => {
+        if (this.status.state === "connected" &&
+            this.lastHeartbeat > 0 &&
+            Date.now() - this.lastHeartbeat > REST_STALE_MS) {
+          this.setStatus({ state: "stale", since: Date.now(), lastTickAt: this.lastHeartbeat });
+        }
+      }, 5_000);
+    }
+    try { handler(this.status); } catch { /* handler owns its errors */ }
+    return () => {
+      this.statusSubscribers.delete(handler);
+      if (this.statusSubscribers.size === 0 && this.heartbeatWatcher) {
+        clearInterval(this.heartbeatWatcher);
+        this.heartbeatWatcher = null;
+      }
+    };
+  }
+
+  lastTickAt(symbol: string): number | null {
+    const t = this.lastTickPerSymbol.get(symbol);
+    return typeof t === "number" ? t : null;
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    if (next.state === this.status.state) return;
+    this.status = next;
+    for (const h of this.statusSubscribers) {
+      try { h(next); } catch { /* keep going */ }
+    }
+  }
+
+  private heartbeat(symbol?: string): void {
+    const now = Date.now();
+    this.lastHeartbeat = now;
+    if (symbol) this.lastTickPerSymbol.set(symbol, now);
+    if (this.status.state !== "connected") {
+      this.setStatus({ state: "connected", since: now });
+    }
   }
 
   async getBars(opts: { symbol: string; resolution: Resolution; from: number; to: number }): Promise<Bar[]> {
@@ -56,6 +116,8 @@ export class YFinanceDataAdapter implements DataAdapter {
         from: opts.from,
         to: opts.to,
       });
+      // Successful REST call = heartbeat for this symbol.
+      this.heartbeat(opts.symbol);
       const rows = (data?.bars ?? []) as any[];
       return rows.map(r => ({
         time: num(r.t ?? r.time),
@@ -71,6 +133,7 @@ export class YFinanceDataAdapter implements DataAdapter {
   async getQuote(symbol: string): Promise<Quote> {
     return this.call("getQuote", async () => {
       const data = await this.bridge("quote", { symbol });
+      this.heartbeat(symbol);
       const q = data?.quote ?? {};
       return {
         symbol,

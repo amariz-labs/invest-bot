@@ -91,6 +91,20 @@ export interface EconomicEvent {
   previous?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Connection status — see adapters/README.md "Connection status protocol".
+// `since` is the unix-ms timestamp the adapter entered the current state.
+// `lastTickAt` is the unix-ms timestamp of the most recent quote on any
+// subscribed symbol (only meaningful while connected/stale). `attempts`
+// counts reconnect tries in the current burst. `error` is the last error
+// surfaced from the WS or REST layer when disconnected.
+// ---------------------------------------------------------------------------
+export type ConnectionStatus =
+  | { state: "connected"; since: number }
+  | { state: "reconnecting"; since: number; attempts: number }
+  | { state: "stale"; since: number; lastTickAt?: number }
+  | { state: "disconnected"; since: number; error?: string };
+
 export interface DataAdapter {
   readonly name: string;
   readonly tier: "free" | "starter" | "pro";
@@ -129,6 +143,37 @@ export interface DataAdapter {
 
   // Health
   ping(): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }>;
+
+  // Connection status channel. Handlers receive the current status
+  // synchronously on subscribe (so a UI mounting mid-session doesn't sit
+  // blank), then every subsequent state transition. Returns an unsubscribe
+  // function. Adapters that have no real connection (e.g. pure REST) should
+  // still emit "connected" / "stale" based on REST heartbeats.
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void;
+
+  // Per-symbol last-tick timestamp (unix ms). Returns null if the adapter
+  // has never observed a quote for this symbol. Used by consumers to dim
+  // rows that have gone quiet relative to the rest of the table.
+  lastTickAt(symbol: string): number | null;
+}
+
+// True if the connection is in a non-healthy state — `reconnecting`,
+// `stale`, `disconnected`, or `connected` but the latest tick predates
+// `maxQuietMs`. `maxQuietMs` defaults to 15s, matching the watchlist
+// staleness threshold. Callers using REST-only adapters should pass a
+// larger window (e.g. 60_000) since polling intervals are longer.
+export function isStale(status: ConnectionStatus, maxQuietMs = 15_000): boolean {
+  if (status.state === "reconnecting" || status.state === "disconnected") return true;
+  if (status.state === "stale") return true;
+  // status.state === "connected"
+  // No per-symbol info here — we rely on the adapter to flip to "stale"
+  // when its own heartbeat ages out. But if a caller hands us a status
+  // with an attached `lastTickAt` (some adapters extend it informally),
+  // honour that. The TypeScript shape doesn't carry it; we use a runtime
+  // check so the helper remains a single source of truth.
+  const maybeLast = (status as { lastTickAt?: number }).lastTickAt;
+  if (typeof maybeLast === "number" && Date.now() - maybeLast > maxQuietMs) return true;
+  return false;
 }
 
 // Convenience: turn a Bar series into a Lightweight Charts CandlestickData[].

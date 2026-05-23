@@ -4,10 +4,20 @@
 // Docs: https://polygon.io/docs
 
 import {
-  DataAdapter, Bar, Quote, SymbolInfo, OptionsChain, Resolution,
+  DataAdapter, Bar, Quote, SymbolInfo, OptionsChain, Resolution, ConnectionStatus,
 } from "../DataAdapter";
 import { DataError, num } from "./errors";
 import { SerialQueue } from "./queue";
+
+// Backoff schedule for WS reconnects. Capped at 30s — anything longer and
+// the user wants a hard "disconnected" signal so they can intervene.
+const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 30_000];
+const MAX_RECONNECT_ATTEMPTS = 8;
+// Quiet-tick threshold: WS still "open" but no Q frames in this many ms
+// flips status to "stale". Matches the watchlist's per-row threshold.
+const STALE_QUIET_MS = 15_000;
+// Coalesce reconnect-driven re-fetches so a flap doesn't slam the REST API.
+const REFETCH_DEBOUNCE_MS = 500;
 
 export interface PolygonConfig {
   apiKey: string;
@@ -34,6 +44,24 @@ export class PolygonDataAdapter implements DataAdapter {
   private queue = new SerialQueue({ minSpacingMs: 50 });
   private rateState = { limit: 100, remaining: 100, resetAt: 0 };
 
+  // Connection-status bookkeeping. `status` is the authoritative value
+  // emitted to subscribers; `statusSubscribers` is iterated synchronously
+  // on every transition. `lastTickPerSymbol` is the source of truth for
+  // `lastTickAt(symbol)`. `staleTimer` flips us to "stale" if the WS goes
+  // quiet while still open. `liveSymbols` is the set of symbols any active
+  // `streamQuotes()` caller subscribed to — needed by the reconnect
+  // re-fetch path so daily bars (and therefore prevClose) correct themselves.
+  private status: ConnectionStatus = { state: "disconnected", since: Date.now() };
+  private statusSubscribers = new Set<(s: ConnectionStatus) => void>();
+  private lastTickPerSymbol = new Map<string, number>();
+  private staleTimer: ReturnType<typeof setTimeout> | null = null;
+  private liveSymbols = new Set<string>();
+  private refetchTimer: ReturnType<typeof setTimeout> | null = null;
+  // Hook so callers (e.g. HeroChart) can be notified that we just re-fetched
+  // the latest daily bar after a reconnect — set by streamQuotes() callers
+  // who care. The contract is "fire-and-forget per symbol".
+  private onReconnectRefetch: ((symbol: string, bar: Bar) => void) | null = null;
+
   constructor(cfg: PolygonConfig & { tier?: "free" | "starter" | "pro" }) {
     if (!cfg.apiKey) throw new DataError("polygon", "config", "POLYGON_KEY is required");
     this.apiKey = cfg.apiKey;
@@ -42,6 +70,49 @@ export class PolygonDataAdapter implements DataAdapter {
   }
 
   get rateLimit() { return { ...this.rateState }; }
+
+  // ---- connection status -----------------------------------------------
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void {
+    this.statusSubscribers.add(handler);
+    // Fire current state synchronously so a late subscriber doesn't sit blank.
+    // This is the deliberate fix for the "handler may miss the initial
+    // 'connected' transition if subscribeStatus is called after WS open" race.
+    try { handler(this.status); } catch { /* handler is responsible for its own errors */ }
+    return () => { this.statusSubscribers.delete(handler); };
+  }
+
+  lastTickAt(symbol: string): number | null {
+    const t = this.lastTickPerSymbol.get(symbol);
+    return typeof t === "number" ? t : null;
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    // Only emit on actual transitions — guarantees handlers don't see
+    // "connected" twice for one logical WS open.
+    if (next.state === this.status.state &&
+        (next as { attempts?: number }).attempts === (this.status as { attempts?: number }).attempts) {
+      return;
+    }
+    this.status = next;
+    for (const h of this.statusSubscribers) {
+      try { h(next); } catch { /* never let one bad handler break the rest */ }
+    }
+  }
+
+  private armStaleTimer(): void {
+    if (this.staleTimer) clearTimeout(this.staleTimer);
+    this.staleTimer = setTimeout(() => {
+      // If we're still in "connected" but no ticks for STALE_QUIET_MS, flip.
+      if (this.status.state === "connected") {
+        const lastTick = Math.max(0, ...Array.from(this.lastTickPerSymbol.values()));
+        this.setStatus({
+          state: "stale",
+          since: Date.now(),
+          lastTickAt: lastTick || undefined,
+        });
+      }
+    }, STALE_QUIET_MS);
+  }
 
   // ---- bars -------------------------------------------------------------
   async getBars(opts: { symbol: string; resolution: Resolution; from: number; to: number; extendedHours?: boolean }): Promise<Bar[]> {
@@ -83,35 +154,122 @@ export class PolygonDataAdapter implements DataAdapter {
   }
 
   // ---- streaming --------------------------------------------------------
+  // Polygon WS endpoints: stocks -> wss://socket.polygon.io/stocks
+  // Frame format: [{ev:"Q", sym, bp, bs, ap, as, t}, ...]
+  //
+  // Reconnect protocol:
+  //   - On WS close before max attempts: emit "reconnecting" with attempt
+  //     count, sleep BACKOFF_MS[attempt], dial again.
+  //   - On WS open: emit "connected", reset attempt counter, re-subscribe.
+  //   - After reconnect we ALSO re-fetch the latest daily bar for every
+  //     symbol still subscribed (debounced REFETCH_DEBOUNCE_MS), so
+  //     consumers' prevClose / dayΔ snap back to the truth instead of
+  //     drifting against ticks that arrived mid-disconnect.
+  //   - After MAX_RECONNECT_ATTEMPTS: emit "disconnected" and give up.
+  //   - Quiet detection: every Q frame resets the stale timer; if the
+  //     timer fires while still "connected", we flip to "stale".
   streamQuotes(symbols: string[], handler: (q: Quote) => void): () => void {
-    // Polygon WS endpoints: stocks -> wss://socket.polygon.io/stocks
-    // Frame format: [{ev:"Q", sym, bp, bs, ap, as, t}, ...]
+    for (const s of symbols) this.liveSymbols.add(s);
+
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const WebSocket = require("ws");
-    const ws = new WebSocket("wss://socket.polygon.io/stocks");
-    let closed = false;
-    ws.on("open", () => {
-      ws.send(JSON.stringify({ action: "auth", params: this.apiKey }));
-      ws.send(JSON.stringify({ action: "subscribe", params: symbols.map(s => `Q.${s}`).join(",") }));
-    });
-    ws.on("message", (raw: Buffer) => {
-      try {
-        const frames = JSON.parse(raw.toString());
-        for (const f of frames) {
-          if (f.ev !== "Q") continue;
-          handler({
-            symbol: f.sym,
-            bid: num(f.bp),
-            bidSize: num(f.bs),
-            ask: num(f.ap),
-            askSize: num(f.as),
-            last: num(f.bp), // Q frames don't include trade; use T.* if needed
-            timestamp: num(f.t),
+    let ws: any = null;
+    let closedByCaller = false;
+    let attempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const dial = (): void => {
+      if (closedByCaller) return;
+      ws = new WebSocket("wss://socket.polygon.io/stocks");
+
+      ws.on("open", () => {
+        attempts = 0;
+        ws.send(JSON.stringify({ action: "auth", params: this.apiKey }));
+        ws.send(JSON.stringify({ action: "subscribe", params: symbols.map(s => `Q.${s}`).join(",") }));
+        this.setStatus({ state: "connected", since: Date.now() });
+        this.armStaleTimer();
+        // Re-fetch latest daily bar for every subscribed symbol after a
+        // reconnect — debounced so a flap doesn't slam the REST API.
+        this.scheduleReconnectRefetch();
+      });
+
+      ws.on("message", (raw: Buffer) => {
+        try {
+          const frames = JSON.parse(raw.toString());
+          for (const f of frames) {
+            if (f.ev !== "Q") continue;
+            const ts = num(f.t);
+            this.lastTickPerSymbol.set(f.sym, ts || Date.now());
+            // Every tick is a heartbeat — if we drifted into "stale"
+            // we recover automatically.
+            if (this.status.state === "stale") {
+              this.setStatus({ state: "connected", since: Date.now() });
+            }
+            this.armStaleTimer();
+            handler({
+              symbol: f.sym,
+              bid: num(f.bp),
+              bidSize: num(f.bs),
+              ask: num(f.ap),
+              askSize: num(f.as),
+              last: num(f.bp),
+              timestamp: ts || Date.now(),
+            });
+          }
+        } catch { /* ignore malformed frames */ }
+      });
+
+      ws.on("close", () => {
+        if (closedByCaller) return;
+        if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+          this.setStatus({
+            state: "disconnected",
+            since: Date.now(),
+            error: `gave up after ${attempts} reconnect attempts`,
           });
+          return;
         }
-      } catch { /* ignore malformed frames */ }
-    });
-    return () => { closed = true; try { ws.close(); } catch { /* idempotent */ } void closed; };
+        attempts++;
+        this.setStatus({ state: "reconnecting", since: Date.now(), attempts });
+        const wait = BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)] as number;
+        reconnectTimer = setTimeout(dial, wait);
+      });
+
+      ws.on("error", (err: Error) => {
+        // ws will follow up with `close` — track the error for the
+        // disconnected payload but don't double-emit here.
+        void err;
+      });
+    };
+
+    dial();
+
+    return () => {
+      closedByCaller = true;
+      for (const s of symbols) this.liveSymbols.delete(s);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (this.staleTimer) { clearTimeout(this.staleTimer); this.staleTimer = null; }
+      try { ws?.close(); } catch { /* idempotent */ }
+      this.setStatus({ state: "disconnected", since: Date.now() });
+    };
+  }
+
+  // Re-fetch the latest daily bar for every live symbol so consumers'
+  // prevClose / dayΔ correct themselves after a reconnect. Debounced.
+  private scheduleReconnectRefetch(): void {
+    if (this.refetchTimer) return;
+    this.refetchTimer = setTimeout(async () => {
+      this.refetchTimer = null;
+      const now = Math.floor(Date.now() / 1000);
+      const from = now - 3 * 86_400;
+      for (const sym of this.liveSymbols) {
+        try {
+          const bars = await this.getBars({ symbol: sym, resolution: "D", from, to: now });
+          const last = bars[bars.length - 1];
+          if (last && this.onReconnectRefetch) this.onReconnectRefetch(sym, last);
+        } catch { /* swallow — best-effort refresh */ }
+      }
+    }, REFETCH_DEBOUNCE_MS);
   }
 
   // ---- symbol metadata --------------------------------------------------
