@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast: runs our scripts/lint-skills.ts against the 35 SKILL.md files.
+  # No installs needed — uses Node 22's native --experimental-strip-types.
+  skills-lint:
+    name: Lint SKILL.md
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint skills (strict)
+        run: node --experimental-strip-types scripts/lint-skills.ts --strict
+
+  # web/ — Next.js 15 host. tsc --noEmit + Biome lint.
+  web-check:
+    name: web typecheck + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install deps
+        run: npm install --no-fund --no-audit --legacy-peer-deps
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Biome lint
+        run: npm run lint
+
+  # mcp/ — MCP server. Just builds the TS to dist/.
+  mcp-build:
+    name: mcp build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install deps
+        run: npm install --no-fund --no-audit --legacy-peer-deps
+      - name: Build
+        run: npm run build
