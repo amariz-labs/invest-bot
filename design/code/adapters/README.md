@@ -111,6 +111,12 @@ export const broker = new RecordingBrokerAdapter(real, {
 
 Several methods are stubbed with `throw new Error("unsupported: ...")` where the underlying SDK doesn't expose the capability — e.g. `IBKRBrokerAdapter.getOptionsChain` (would require `reqSecDefOptParams` plumbing not yet built), `AlpacaBrokerAdapter.getOptionsChain` (SDK doesn't surface the options-snapshot endpoints yet), `YFinanceDataAdapter.getEarningsCalendar` (yfinance is per-symbol only). Mix-and-match adapters: if you need options chains on IBKR, layer in `PolygonDataAdapter` for that one call.
 
+## Connection status protocol
+
+Every `DataAdapter` exposes a `subscribeStatus(handler)` channel that emits a `ConnectionStatus` discriminated union — `connected`, `reconnecting` (with `attempts`), `stale` (with optional `lastTickAt`), or `disconnected` (with optional `error`). Handlers are called **synchronously with the current status on subscribe** so a UI mounting mid-session never sits blank, then on every subsequent transition. The `lastTickAt(symbol)` method returns the unix-ms timestamp of the most recent quote observed for a given symbol, or `null` if none yet — consumers (e.g. `Watchlist`) compare it to `Date.now()` to dim individual rows that have gone quiet while the connection itself is still healthy.
+
+WebSocket-backed adapters (`PolygonDataAdapter`, `TwelveDataDataAdapter`) emit `connected` on socket open, `reconnecting` with an incrementing attempt counter on close (exponential backoff 1s/2s/4s/8s/30s, capped at 8 attempts), `stale` when the socket is open but no ticks arrived in 15s, and `disconnected` after giving up. After every successful reconnect they re-fetch the latest daily bar for every still-subscribed symbol — debounced by 500ms so a flapping connection doesn't slam the REST API — so consumers' `prevClose` and `dayΔ` correct themselves automatically. REST-only adapters (`YFinanceDataAdapter`) treat each successful `getBars`/`getQuote` as a heartbeat and flip to `stale` after 60s of quiet. The `isStale(status, maxQuietMs)` helper exported from `DataAdapter.ts` is the single source of truth for whether a UI should show a degraded indicator.
+
 ## Adding a new adapter
 
 1. Create `<Name>BrokerAdapter.ts` or `<Name>DataAdapter.ts` implementing every method on the interface.

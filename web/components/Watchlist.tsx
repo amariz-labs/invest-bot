@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { data } from "@/lib/data";
-import type { Bar, Quote } from "@/lib/types";
+import type { Bar, Quote, ConnectionStatus } from "@/lib/types";
 import { fmtCompact, fmtCurrency, fmtNumber, fmtPercent } from "@/lib/format";
 
 export interface WatchlistProps {
@@ -54,6 +54,8 @@ const DAY = 86_400;
 const SPARK_BARS = 30;
 const ANNOUNCE_DELTA = 0.0025; // 0.25 %
 const DOM_THROTTLE_MS = 1000;
+const STALE_ROW_MS = 15_000;
+const STALE_CHECK_MS = 1_000;
 
 function deterministicNumber(symbol: string, salt: number, span: number, floor: number) {
   let seed = salt;
@@ -168,6 +170,10 @@ export function Watchlist({ symbols, onSymbolSelect }: WatchlistProps) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [focusIdx, setFocusIdx] = useState(0);
   const [announcement, setAnnouncement] = useState<string>("");
+  const [connStatus, setConnStatus] = useState<ConnectionStatus["state"]>("connected");
+  // `staleSymbols` is the set of rows currently dimmed. Updated by a
+  // single 1Hz interval — per design brief, we never spin a timer per row.
+  const [staleSymbols, setStaleSymbols] = useState<Set<string>>(() => new Set());
 
   // Mutable mirror of `rows` so the live-quote handler can mutate without
   // forcing a re-render per tick — we flush via rAF + 1s throttle.
@@ -264,9 +270,35 @@ export function Watchlist({ symbols, onSymbolSelect }: WatchlistProps) {
 
     const unsub = data.realtime.streamQuotes(symbolList, handler);
 
+    // Connection-status pill — see HeroChart for the same pattern.
+    const unsubStatus = data.realtime.subscribeStatus((s) => {
+      if (disposed) return;
+      setConnStatus((prev: ConnectionStatus["state"]) => (prev === s.state ? prev : s.state));
+    });
+
+    // Single 1Hz interval scans every row's lastTickAt. Per-row timers
+    // would scale poorly with large watchlists and contradict the brief.
+    const staleInterval = setInterval(() => {
+      if (disposed) return;
+      const now = Date.now();
+      const next = new Set<string>();
+      for (const s of symbolList) {
+        const t = data.realtime.lastTickAt(s);
+        if (t !== null && now - t > STALE_ROW_MS) next.add(s);
+      }
+      // Avoid re-rendering when the set hasn't changed (cheap shallow-eq).
+      setStaleSymbols((prev: Set<string>) => {
+        if (prev.size !== next.size) return next;
+        for (const s of next) if (!prev.has(s)) return next;
+        return prev;
+      });
+    }, STALE_CHECK_MS);
+
     return () => {
       disposed = true;
       unsub();
+      unsubStatus();
+      clearInterval(staleInterval);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
@@ -330,8 +362,40 @@ export function Watchlist({ symbols, onSymbolSelect }: WatchlistProps) {
     { key: "relVol", label: "Rel.Vol", align: "right" },
   ];
 
+  // Top-of-table status pill. Mirrors HeroChart's behavior so the dashboard
+  // speaks a single visual language: amber dot = transient, red dot = bad.
+  const pillVisible = connStatus !== "connected";
+  const pillLabel =
+    connStatus === "reconnecting" ? "Reconnecting…"
+    : connStatus === "stale" ? "Stale"
+    : connStatus === "disconnected" ? "Disconnected"
+    : "Connecting…";
+  const pillDotColor =
+    connStatus === "reconnecting" ? "hsl(var(--warning))"
+    : "hsl(var(--danger))";
+
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto relative">
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="absolute top-1 right-1 z-10 pointer-events-none"
+        style={{ opacity: pillVisible ? 1 : 0, transition: "opacity 360ms ease-out" }}
+      >
+        {pillVisible && (
+          <div
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-elevated/80 text-[11px] text-content-secondary"
+            style={{ backdropFilter: "blur(6px)" }}
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: pillDotColor }}
+            />
+            <span>{pillLabel}</span>
+          </div>
+        )}
+      </div>
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <table
         ref={tableRef}
@@ -411,9 +475,14 @@ export function Watchlist({ symbols, onSymbolSelect }: WatchlistProps) {
                 const sign: "up" | "down" | "flat" =
                   row.dayDelta > 0 ? "up" : row.dayDelta < 0 ? "down" : "flat";
                 const isFocused = i === focusIdx;
+                const isStaleRow = staleSymbols.has(row.symbol);
+                // Dim only price/Δ/Δ% — symbol/volume/spark/etc keep full
+                // opacity so the user can still scan the table layout.
+                const staleCell = isStaleRow ? "opacity-50" : "";
                 return (
                   <tr
                     key={row.symbol}
+                    data-stale={isStaleRow ? "true" : undefined}
                     className={`border-t border-subtle ${
                       isFocused ? "bg-surface-elevated/60" : "hover:bg-surface-elevated/40"
                     }`}
@@ -427,16 +496,16 @@ export function Watchlist({ symbols, onSymbolSelect }: WatchlistProps) {
                         {row.symbol}
                       </button>
                     </td>
-                    <td className="px-2 py-2 text-right">
+                    <td className={`px-2 py-2 text-right ${staleCell}`}>
                       {row.last > 0 ? fmtCurrency(row.last, { precise: true }) : "—"}
                     </td>
-                    <td className={`px-2 py-2 text-right ${colorClass(row.dayDelta)}`}>
+                    <td className={`px-2 py-2 text-right ${colorClass(row.dayDelta)} ${staleCell}`}>
                       {row.dayDelta !== 0
                         ? `${row.dayDelta >= 0 ? "+" : "−"}${fmtCurrency(Math.abs(row.dayDelta), { precise: true })}`
                         : "—"}
                     </td>
                     <td
-                      className={`px-2 py-2 text-right ${colorClass(row.dayPct)}`}
+                      className={`px-2 py-2 text-right ${colorClass(row.dayPct)} ${staleCell}`}
                       aria-live="polite"
                     >
                       {row.dayPct !== 0

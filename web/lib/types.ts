@@ -138,6 +138,23 @@ export interface SymbolInfo {
   optionable?: boolean;
 }
 
+// Connection-status channel. Mirrors design/code/DataAdapter.ts —
+// keep these definitions byte-for-byte in sync. See
+// design/code/adapters/README.md "Connection status protocol".
+export type ConnectionStatus =
+  | { state: "connected"; since: number }
+  | { state: "reconnecting"; since: number; attempts: number }
+  | { state: "stale"; since: number; lastTickAt?: number }
+  | { state: "disconnected"; since: number; error?: string };
+
+export function isStale(status: ConnectionStatus, maxQuietMs = 15_000): boolean {
+  if (status.state === "reconnecting" || status.state === "disconnected") return true;
+  if (status.state === "stale") return true;
+  const maybeLast = (status as { lastTickAt?: number }).lastTickAt;
+  if (typeof maybeLast === "number" && Date.now() - maybeLast > maxQuietMs) return true;
+  return false;
+}
+
 export interface DataAdapter {
   readonly name: string;
   readonly tier: "free" | "starter" | "pro";
@@ -154,4 +171,11 @@ export interface DataAdapter {
   search(query: string, opts?: { type?: SymbolInfo["type"]; limit?: number }): Promise<SymbolInfo[]>;
   readonly rateLimit?: { limit: number; remaining: number; resetAt: number };
   ping(): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }>;
+  // Subscribe to the adapter's connection-status feed. The handler MUST
+  // be called synchronously with the current status on subscribe, then on
+  // every transition. Returns an unsubscribe function.
+  subscribeStatus(handler: (s: ConnectionStatus) => void): () => void;
+  // Unix-ms timestamp of the most recent quote seen for `symbol`, or null
+  // if the adapter has never observed one.
+  lastTickAt(symbol: string): number | null;
 }

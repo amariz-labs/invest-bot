@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { data } from "@/lib/data";
-import type { Quote } from "@/lib/types";
+import type { Quote, ConnectionStatus } from "@/lib/types";
 
 // `lightweight-charts` exports many types; we only need a few at the call
 // site. Using `any` for SDK-shape returns from the dynamic import is the
@@ -63,6 +63,11 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
   const lastBarRef = useRef<CandleBar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connStatus, setConnStatus] = useState<ConnectionStatus["state"]>("connected");
+  // We only flip the pill's visibility on actual state changes (not on
+  // every status emission) so the aria-live announcement fires once per
+  // transition, not continuously. `lastAnnouncedStateRef` is the cursor.
+  const lastAnnouncedStateRef = useRef<ConnectionStatus["state"]>("connected");
 
   // Mount once per symbol. Tearing down on symbol change is simpler than
   // hot-swapping series and avoids races between the in-flight fetch and a
@@ -231,8 +236,22 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
       unsubscribe = data.realtime.streamQuotes([symbol], handler);
     })();
 
+    // Connection-status subscription. Lives on the same effect so it tears
+    // down with the chart. Per the DataAdapter contract, the handler is
+    // called synchronously with the current status on subscribe — that's
+    // how the pill knows the right initial state without flashing.
+    const unsubStatus = data.realtime.subscribeStatus((s) => {
+      if (disposed) return;
+      setConnStatus((prev: ConnectionStatus["state"]) => {
+        if (prev === s.state) return prev;
+        lastAnnouncedStateRef.current = s.state;
+        return s.state;
+      });
+    });
+
     return () => {
       disposed = true;
+      unsubStatus();
       if (unsubscribe) unsubscribe();
       if (resizeObserver) resizeObserver.disconnect();
       cancelAnimationFrame(resizeRaf);
@@ -246,6 +265,21 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
     };
   }, [symbol, height]);
 
+  // Visual pill — only shown for non-healthy states. Uses the same color
+  // tokens as the rest of the dashboard (`--warning` amber, `--danger`
+  // red). pointer-events-none so it never intercepts crosshair drags.
+  // The opacity transition is the only animation — design brief §8 caps
+  // motion to opacity/transform.
+  const pillVisible = connStatus === "reconnecting" || connStatus === "stale" || connStatus === "disconnected";
+  const pillLabel =
+    connStatus === "reconnecting" ? "Reconnecting…"
+    : connStatus === "stale" ? "Quote stale"
+    : connStatus === "disconnected" ? "Disconnected"
+    : "";
+  const pillDotColor =
+    connStatus === "reconnecting" ? "hsl(var(--warning))"
+    : "hsl(var(--danger))";
+
   return (
     <div className="relative" style={{ height }}>
       <div
@@ -255,6 +289,29 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
         aria-label={`${symbol} price chart, daily candles`}
         tabIndex={0}
       />
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="absolute top-2 right-2 z-10 pointer-events-none"
+        style={{
+          opacity: pillVisible ? 1 : 0,
+          transition: "opacity 360ms ease-out",
+        }}
+      >
+        {pillVisible && (
+          <div
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-elevated/80 text-[11px] text-content-secondary"
+            style={{ backdropFilter: "blur(6px)" }}
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: pillDotColor }}
+            />
+            <span>{pillLabel}</span>
+          </div>
+        )}
+      </div>
       {loading && (
         <div
           aria-hidden="true"
