@@ -10,6 +10,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# `pull-requests: write` is required for the on-failure github-script step
+# in each job to comment the failing log on the open PR. Without this the
+# token is read-only and `issues.createComment` silently 403s.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   # Fast: runs our scripts/lint-skills.ts against the 35 SKILL.md files.
   # No installs needed — uses Node 22's native --experimental-strip-types.
@@ -35,11 +43,18 @@ jobs:
             const fs = require('fs');
             const log = fs.existsSync('skills.log') ? fs.readFileSync('skills.log', 'utf8').slice(-6000) : '(no log)';
             const body = `## CI failure: Lint SKILL.md\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n<details open><summary>Last 6KB of <code>node scripts/lint-skills.ts --strict</code></summary>\n\n\`\`\`\n${log}\n\`\`\`\n\n</details>`;
-            const prs = await github.rest.pulls.list({ owner: context.repo.owner, repo: context.repo.repo, state: 'open', head: `${context.repo.owner}:${context.ref.replace(/^refs\/heads\//,'')}` });
-            for (const pr of prs.data) {
-              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, body });
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
             }
-            core.setFailed('skills-lint failed');
+            core.setFailed('skills-lint failed (see PR comment)');
 
   # web/ — Next.js 15 host. tsc --noEmit + Biome lint.
   web-check:
@@ -92,9 +107,16 @@ jobs:
             ];
             const sections = sectionsRaw.map(([name, body, outcome]) => `<details${outcome === 'failure' ? ' open' : ''}><summary>${outcome === 'failure' ? '❌' : (outcome === 'success' ? '✅' : '⏭️')} ${name}</summary>\n\n\`\`\`\n${body}\n\`\`\`\n\n</details>`).join('\n\n');
             const body = `## CI failure: web typecheck + lint\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n${sections}`;
-            const prs = await github.rest.pulls.list({ owner: context.repo.owner, repo: context.repo.repo, state: 'open', head: `${context.repo.owner}:${context.ref.replace(/^refs\/heads\//,'')}` });
-            for (const pr of prs.data) {
-              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, body });
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
             }
             core.setFailed('web-check failed (see PR comment)');
 
@@ -140,8 +162,15 @@ jobs:
             ];
             const sections = sectionsRaw.map(([name, body, outcome]) => `<details${outcome === 'failure' ? ' open' : ''}><summary>${outcome === 'failure' ? '❌' : (outcome === 'success' ? '✅' : '⏭️')} ${name}</summary>\n\n\`\`\`\n${body}\n\`\`\`\n\n</details>`).join('\n\n');
             const body = `## CI failure: mcp build\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n${sections}`;
-            const prs = await github.rest.pulls.list({ owner: context.repo.owner, repo: context.repo.repo, state: 'open', head: `${context.repo.owner}:${context.ref.replace(/^refs\/heads\//,'')}` });
-            for (const pr of prs.data) {
-              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, body });
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
             }
             core.setFailed('mcp-build failed (see PR comment)');
