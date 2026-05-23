@@ -7,6 +7,7 @@ The repo doubles as a Claude Code **skills pack**: drop the `.claude/skills/` fo
 ## What's here
 
 - [`SKILLS.md`](./SKILLS.md) — exhaustive categorized catalog of open-source repos and Claude Code skills relevant to trading, quant finance, dashboards, GitHub workflow, and trading psychology. Compiled from a 10-agent research sweep of the 2026 ecosystem.
+- [`FAVOURITE-REPOS.md`](./FAVOURITE-REPOS.md) — curated favourites list: the 8 user-pinned anchors (vinta/awesome-python, awesome-selfhosted, the-book-of-secret-knowledge, sindresorhus/awesome, FinceptTerminal, codegraph, oh-my-pi, anthropics/claude-plugins-official) plus our peer trading-skills packs, with PORT / LINK / CHAIN / PARK / META verdicts.
 - [`design/`](./design/) — Voltrex-grade dashboard design pack:
   - [`DASHBOARD-BRIEF.md`](./design/DASHBOARD-BRIEF.md) — visual system, tokens, charts, IA, motion, a11y/perf/i18n (the universal layer)
   - [`EQUITIES-DASHBOARD.md`](./design/EQUITIES-DASHBOARD.md) — equities/ETF/index-specific adaptation (order ticket, PDT, wash-sale, sessions)

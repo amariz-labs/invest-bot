@@ -45,3 +45,7 @@ uvx --with quantstats --with empyrical-reloaded --with yfinance python -c "impor
 
 - Don't trust quantstats' "Risk-Free Rate" default — always pass `rf=` explicitly from a FRED 3M T-bill series if user gives one (use `market-data` with `--source fred`).
 - Don't use original `empyrical` or original `pyfolio` (both unmaintained) — use the `-reloaded` forks.
+
+# Upstream alternative
+
+For users who want a turn-key tearsheet without touching our `reports/` convention, [`marketcalls/vectorbt-backtesting-skills`](https://github.com/marketcalls/vectorbt-backtesting-skills) ships a `quick-stats` skill that wraps QuantStats with sensible defaults. Install it alongside; route `/quant-tearsheet --quick` invocations to theirs and post-process their HTML into our `reports/quant-tearsheet/<ts>/` tree. Keep this skill for cases that need (a) explicit FRED-RF integration, (b) emit-JSON-atoms-too, or (c) chain into `mistake-miner` via the `metrics.json` artifact.

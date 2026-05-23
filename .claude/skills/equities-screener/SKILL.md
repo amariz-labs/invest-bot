@@ -75,3 +75,8 @@ uvx --with polygon-api-client --with yfinance --with pandas python -c "import po
 - Don't trust short-interest data refreshed < weekly (FINRA cadence).
 - Don't filter on `rvol` without checking `volume > 100k` — penny stocks distort the ratio.
 - Don't return ETFs and equities in the same table without an `etf` column — they have different risk characteristics.
+
+# Credits
+
+- [OpenBB equity/screener](https://docs.openbb.co/platform/reference/equity/screener) — alternative if you'd rather use OpenBB's terminal UI.
+- [tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) — CANSLIM / VCP / FinViz screener skills that complement this one.

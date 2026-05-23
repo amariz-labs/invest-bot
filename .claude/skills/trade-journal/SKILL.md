@@ -77,3 +77,8 @@ uvx --with pyyaml --with pandas python -c "import yaml"
 - Don't overwrite a closed trade — append; if user wants to amend a number, write a `corrections:` block.
 - Don't compute "win rate" without flagging sample size — < 30 trades is noise.
 - Don't auto-classify `lessons` — that's `mistake-miner`'s job and needs more context than one trade.
+
+# Credits
+
+- [Eleven-Trading/TradeNote](https://github.com/Eleven-Trading/TradeNote) — our YAML frontmatter is schema-compatible; route exports there for the Vue/Mongo UI.
+- [tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) — sibling journal skill with a richer lifecycle.

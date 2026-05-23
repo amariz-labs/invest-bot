@@ -77,3 +77,7 @@ uvx --with backtesting --with vectorbt --with yfinance --with bokeh python -c "i
 - Don't claim profitability from a single backtest — always chain `quant-tearsheet` on out-of-sample data and report MAR/MAR-ratio.
 - Don't optimize > 4 parameters without warning about overfitting — bias goes up roughly with `2^k`.
 - Don't use Backtesting.py for portfolio-level multi-asset — it's single-instrument by design.
+
+# Upstream alternative
+
+[`marketcalls/vectorbt-backtesting-skills`](https://github.com/marketcalls/vectorbt-backtesting-skills) ships 5 invocable skills + 12 strategy templates + native walk-forward + optimize, all built around VectorBT. When the user wants something off the shelf (golden-cross, mean-reversion, breakout) at scale, route to theirs and post-process the output. Keep this skill for: (a) Backtesting.py path (better Bokeh review), (b) custom strategies that need our `strategies/<name>/` repo convention, (c) chain into `pine-to-python` for Pine-parity validation.

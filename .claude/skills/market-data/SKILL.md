@@ -60,3 +60,7 @@ uvx --with yfinance --with ccxt --with fredapi --with edgartools --with pandas p
 - Don't hammer yfinance in a loop — it 429s after ~360 req/hr per IP. Cache aggressively.
 - Don't trust the `Adj Close` column without confirming `auto_adjust=True`.
 - Don't use `tvDatafeed` for anything redistributable — TradingView ToS gray area.
+
+# Credits
+
+- [tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) `market-data-pipeline` — more mature peer; ours is wired to our `DataAdapter` contract.

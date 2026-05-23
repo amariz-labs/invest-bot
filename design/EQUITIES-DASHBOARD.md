@@ -180,7 +180,14 @@ Everything not touched above:
 - The form-input rigor (`type="text" + inputmode="decimal"`, Radix Slider, Intl.NumberFormat).
 - The a11y + perf + i18n checklist — all 24 items still apply.
 
-## §10. Skills to build for this version
+## §10. Open next-iteration items (flagged by agents)
+
+- **Feed-staleness signal.** Neither `HeroChart` nor `Watchlist` currently distinguishes "market flat" from "WebSocket dead." Required: (1) `status` channel on `DataAdapter` (`connected | reconnecting | stale`), (2) per-row `quote.timestamp` with dim-when-stale CSS, (3) on reconnect re-fetch latest daily bar so `prevClose`/`dayΔ` correct themselves.
+- **OI / Sensibull-class options viewer.** Out of scope to build in `web/` — cite [FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal)'s `MultiStrikeOIChart` as the power-user reference. Our `options-chain` skill stays a thin data-fetch.
+- **MCP server wrapping our skills.** Clean-room clone of FinceptTerminal's FastMCP pattern; lets external agents call our skills as MCP tools.
+- **Data-hub topic naming.** Adopt the `option:chain:<sym>` / `prediction:<source>:price:<sym>` convention from FinceptTerminal's `DATAHUB_TOPICS.md` so multiple skills can subscribe to one normalized stream instead of each polling.
+
+## §11. Skills to build for this version
 
 In [`../.claude/skills/`](../.claude/skills):
 - `equities-screener` — runs Finviz-style filters via Polygon / IEX / FMP / yfinance.

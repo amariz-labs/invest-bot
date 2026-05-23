@@ -72,3 +72,7 @@ No new deps beyond the chained skills.
 - Don't write `plan.md` if `pre-trade-checklist` set `trade_today: false`. Instead write `data/journal/YYYY-MM-DD-rest.md` recording why.
 - Don't compute win rate from < 5 trades.
 - Don't moralize in the lessons — the user writes lessons, the skill just provides the form.
+
+# Credits
+
+- [tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) "Core + Satellite routines" — conceptual parent; our orchestrator chains our own skills end-to-end.

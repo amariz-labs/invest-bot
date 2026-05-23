@@ -48,6 +48,11 @@ Discovery lists:
 - [wangzhe3224/awesome-systematic-trading](https://github.com/wangzhe3224/awesome-systematic-trading)
 - [merovinh/best-of-algorithmic-trading](https://github.com/merovinh/best-of-algorithmic-trading) — ranked weekly
 
+Additional finance libraries added in the May-2026 awesome-lists sweep:
+- [zvtm/zvt](https://github.com/zvtm/zvt) — multi-source pluggable quant framework (A-shares + US + crypto)
+- [microprediction/microprediction](https://github.com/microprediction/microprediction) — live time-series prediction streams; complements `vol-forecast`
+- [gerrymanoim/exchange_calendars](https://github.com/gerrymanoim/exchange_calendars) — authoritative trading-session calendars for 60+ venues
+
 ---
 
 ## §2. Quant Statistics, TA, Risk, Tearsheets

@@ -44,3 +44,7 @@ uvx --with transformers --with torch --with feedparser python -c "from transform
 - Don't trade purely on FinBERT — short-horizon sentiment edge decays within minutes to hours; embargo-aware live latency often kills it.
 - Don't quote sentiment as a single number — always report distribution + headline counts.
 - Don't ignore non-English news for non-US tickers — FinBERT is English-only; route to FinGPT-Multilingual.
+
+# Credits
+
+- [OpenBB](https://github.com/OpenBB-finance/OpenBB) behavioral menu and [FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal) AI sentiment view — in-UI alternatives.

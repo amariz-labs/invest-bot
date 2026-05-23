@@ -59,3 +59,7 @@ uvx --with pyportfolioopt --with riskfolio-lib --with skfolio --with yfinance py
 - Don't use raw covariance — always Ledoit-Wolf or OAS shrinkage for ≥ 30 assets.
 - Don't claim "optimal" without holdout testing — chain with `quant-tearsheet` on a walk-forward.
 - Don't pass `mlfinlab` HRP — license is restrictive; PyPortfolioOpt and skfolio both have free HRP.
+
+# Credits
+
+- [OpenBB Portfolio Optimization](https://docs.openbb.co/platform/reference/portfolio) — full UI alternative for users who want the menu, not the file output.
