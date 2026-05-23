@@ -1,4 +1,4 @@
-# Financial-Planner
+# invest-bot
 
 > A personal **US equities / ETF / index / options** trading research repo curated for **Claude Code** (and any other LLM-driven coding agent — Cursor, Codex CLI, Gemini CLI, Aider, ...). Crypto ships as a clearly-labeled **secondary** profile, not as a peer.
 
