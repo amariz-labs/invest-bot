@@ -131,7 +131,13 @@ function Sparkline({ data: points, sign }: { data: number[]; sign: "up" | "down"
   const glyph = sign === "up" ? "▲" : sign === "down" ? "▼" : "▬";
   return (
     <span className="inline-flex items-center gap-1.5" aria-hidden="true">
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block">
+      <svg
+        width={w}
+        height={h}
+        viewBox={`0 0 ${w} ${h}`}
+        className="block"
+        aria-hidden="true"
+      >
         <path d={path} fill="none" stroke={stroke} strokeWidth={1.25} />
         <circle cx={endX} cy={endY} r={1.75} fill={stroke} />
       </svg>
@@ -143,7 +149,12 @@ function Sparkline({ data: points, sign }: { data: number[]; sign: "up" | "down"
 }
 
 function SkeletonRow({ idx }: { idx: number }) {
+  // Skeleton placeholder rows — intentionally hidden from assistive tech
+  // because they're purely visual loading-state filler with no semantic
+  // content. The parent <table>'s real rows render under a separate
+  // aria-live region when they arrive.
   return (
+    // biome-ignore lint/a11y/noAriaHiddenOnFocusable: skeleton placeholder, intentionally hidden from AT
     <tr aria-hidden="true">
       {Array.from({ length: 10 }, (_, i) => (
         <td
