@@ -95,7 +95,7 @@ export async function preTradeGate(payload: TVPayload): Promise<GateResult> {
 
   // 3. Account checks — PDT, buying power. If broker is unconfigured we
   //    fail-closed (we'd rather refuse than yolo into a broken broker SDK).
-  let account;
+  let account: Awaited<ReturnType<typeof brokers.active.getAccount>>;
   try {
     account = await brokers.active.getAccount();
   } catch (err) {
