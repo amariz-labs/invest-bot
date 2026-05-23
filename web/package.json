@@ -13,7 +13,7 @@
     "verify-udf": "tsx scripts/verify-udf.ts"
   },
   "dependencies": {
-    "next": "15.1.4",
+    "next": "15.5.18",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "@radix-ui/react-slider": "1.2.2",
