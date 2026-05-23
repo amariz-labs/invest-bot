@@ -62,21 +62,33 @@ interface UpstashRedisLike {
 }
 
 export class RedisIdempotencyStore implements IdempotencyStore {
-  private readonly client: UpstashRedisLike;
+  private readonly cfg: RedisIdempotencyConfig;
+  private clientP: Promise<UpstashRedisLike> | null = null;
 
   constructor(cfg: RedisIdempotencyConfig) {
     if (!cfg.url || !cfg.token) {
       throw new Error("RedisIdempotencyStore: url and token are required");
     }
-    // Lazy require so projects that don't use Redis aren't forced to install
-    // @upstash/redis. The package.json lists it; this guard is defensive.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("@upstash/redis") as { Redis: new (cfg: RedisIdempotencyConfig) => UpstashRedisLike };
-    this.client = new mod.Redis({ url: cfg.url, token: cfg.token });
+    this.cfg = cfg;
+  }
+
+  // Lazy ESM dynamic import — `@upstash/redis` is an optional dep at runtime.
+  // The original `require("@upstash/redis")` crashed in ESM/NodeNext builds
+  // ("require is not defined"); dynamic `import()` works under both moduleResolution
+  // settings and lets us defer the load until the first call.
+  private getClient(): Promise<UpstashRedisLike> {
+    if (!this.clientP) {
+      this.clientP = import("@upstash/redis").then((mod) => {
+        const Ctor = (mod as { Redis: new (cfg: RedisIdempotencyConfig) => UpstashRedisLike }).Redis;
+        return new Ctor({ url: this.cfg.url, token: this.cfg.token });
+      });
+    }
+    return this.clientP;
   }
 
   async wasProcessed(key: string): Promise<boolean> {
-    const n = await this.client.exists(KEY_PREFIX + key);
+    const client = await this.getClient();
+    const n = await client.exists(KEY_PREFIX + key);
     return n > 0;
   }
 
@@ -84,7 +96,8 @@ export class RedisIdempotencyStore implements IdempotencyStore {
     // SETNX + EXPIRE atomically: Upstash supports the `nx` + `ex` flags on
     // the single SET command, so this is one round-trip with the natural
     // "only set if absent" semantics we want for idempotency.
-    await this.client.set(KEY_PREFIX + key, "1", { nx: true, ex: ttlSec });
+    const client = await this.getClient();
+    await client.set(KEY_PREFIX + key, "1", { nx: true, ex: ttlSec });
   }
 }
 

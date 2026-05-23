@@ -78,11 +78,11 @@ export async function POST(req: Request) {
   //    Cloudflare may retry; the world retries. Always dedupe.
   const bucket = payload.bartime ?? new Date().toISOString().slice(0, 13);
   const key = `${payload.symbol}:${payload.strategy}:${bucket}`;
-  if (wasProcessed(key)) {
+  if (await wasProcessed(key)) {
     await appendAudit({ at, payload, outcome: "dedup", ip });
     return NextResponse.json({ ok: true, dedup: true });
   }
-  markProcessed(key, 60 * 60);
+  await markProcessed(key, 60 * 60);
 
   // 5. Pre-trade gate (PDT, BP, tilt-guard, risk re-size).
   const gate = await preTradeGate(payload);

@@ -48,9 +48,12 @@ export class GateError extends Error {
 // Minimal YAML reader — we only consume a few top-level scalar keys from
 // state.yaml (status, trade_today, tilt_score, updated_at). Pulling in a full
 // YAML parser would balloon the dep tree for this one file.
+//
+// Returns `null` when state.yaml is MISSING. Callers must fail-CLOSED on null
+// — SECURITY.md promises fail-closed semantics when no state is present.
 // ---------------------------------------------------------------------------
-function readState(): Record<string, string | number | boolean> {
-  if (!existsSync(STATE_YAML)) return {};
+function readState(): Record<string, string | number | boolean> | null {
+  if (!existsSync(STATE_YAML)) return null;
   const text = readFileSync(STATE_YAML, "utf8");
   const out: Record<string, string | number | boolean> = {};
   for (const line of text.split(/\r?\n/)) {
@@ -148,8 +151,36 @@ export function preTradeGate(ctx: PreTradeContext): void {
     type: req.type,
   };
 
-  // 1. tilt-guard / pre-trade-checklist state
+  // 1. tilt-guard / pre-trade-checklist state — fail-CLOSED on missing/stale.
   const state = readState();
+  if (state === null) {
+    decision["decision"] = "blocked_state_missing";
+    audit(decision);
+    throw new GateError(
+      "STATE_MISSING",
+      `data/state.yaml not found at ${STATE_YAML} — run /pre-trade-checklist before placing orders (fail-CLOSED per SECURITY.md).`,
+    );
+  }
+  const maxAgeMs = Number(process.env["MCP_STATE_MAX_AGE_MS"] ?? 4 * 60 * 60 * 1000);
+  const updatedAt = Date.parse(String(state["updated_at"] ?? ""));
+  if (!Number.isFinite(updatedAt)) {
+    decision["decision"] = "blocked_state_no_timestamp";
+    audit(decision);
+    throw new GateError(
+      "STATE_MISSING_TIMESTAMP",
+      "state.yaml has no `updated_at` field — cannot verify freshness, refusing trade (fail-CLOSED).",
+    );
+  }
+  if (Date.now() - updatedAt > maxAgeMs) {
+    const ageH = ((Date.now() - updatedAt) / 3_600_000).toFixed(1);
+    decision["decision"] = "blocked_state_stale";
+    decision["age_hours"] = ageH;
+    audit(decision);
+    throw new GateError(
+      "STATE_STALE",
+      `state.yaml is ${ageH}h old (threshold ${(maxAgeMs / 3_600_000).toFixed(1)}h) — re-run /pre-trade-checklist.`,
+    );
+  }
   const status = String(state["status"] ?? "");
   const tradeToday = state["trade_today"];
   if (status === "BLOCKED" || tradeToday === false) {

@@ -1,3 +1,12 @@
 {
-  "_comment": "profiles/day-trading — the ONLY profile that requires hooks. The tilt-guard PreToolUse hook must be registered here (or in ~/.claude/settings.json) before any order-placement MCP tool call can be gated. See ../../.claude/skills/tilt-guard/SKILL.md for the canonical hook registration block — copy it into this file's `hooks` key, OR run `/tilt-guard init` once from this directory and the skill will populate it. Leaving the hook block empty here is intentional until you've decided which broker / MCP tool names to gate."
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "profiles/day-trading ships the tilt-guard PreToolUse hook ENABLED. The matcher covers this repo's MCP server (mcp__financial-planner__place_order), other common MCP broker tools (binance, ccxt), and the Web webhook receiver path used by Bash invocations. Extend the matcher when you add more order-placement tools. See ../../.claude/skills/tilt-guard/check.py for the gate logic. Hook exits 2 (block) on missing/stale state.yaml or status=BLOCKED — fail-closed per SECURITY.md.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__financial-planner__place_order|mcp__binance__order|mcp__ccxt__create_order|mcp__alpaca__place_order|mcp__ibkr__place_order|mcp__tradier__place_order",
+        "command": "python3 .claude/skills/tilt-guard/check.py"
+      }
+    ]
+  }
 }
