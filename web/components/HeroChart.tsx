@@ -206,8 +206,16 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
           };
         });
 
-        priceSeries.setData(candles);
-        volumeSeries.setData(volumes);
+        // `priceSeries`/`volumeSeries` come from the dynamically-imported
+        // lightweight-charts module, so their `setData` is fully typed and
+        // expects `(CandlestickData<Time> | WhitespaceData<Time>)[]` /
+        // `(HistogramData<Time> | WhitespaceData<Time>)[]`. Our local
+        // CandleBar/VolumeBar carry `time: number` (unix seconds, which IS
+        // a valid `UTCTimestamp` at runtime). Cast through the parameter
+        // type to satisfy the brand without coupling our local types to
+        // the SDK's import tree.
+        priceSeries.setData(candles as Parameters<typeof priceSeries.setData>[0]);
+        volumeSeries.setData(volumes as Parameters<typeof volumeSeries.setData>[0]);
         chart.timeScale().fitContent();
         lastBarRef.current = candles[candles.length - 1] ?? null;
         setLoading(false);
@@ -289,7 +297,6 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
         className="w-full h-full"
         role="img"
         aria-label={`${symbol} price chart, daily candles`}
-        tabIndex={0}
       />
       <div
         aria-live="polite"

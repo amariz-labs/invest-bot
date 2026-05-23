@@ -158,6 +158,8 @@ export interface DataAdapter {
   getSymbol(symbol: string): Promise<SymbolInfo>;
   search(query: string, opts?: { type?: SymbolInfo["type"]; limit?: number }): Promise<SymbolInfo[]>;
   getSessions(exchange: string, from: string, to: string): Promise<{ date: string; open: number; close: number }[]>;
+  // Optional capabilities — provider-dependent. Matches design/code/DataAdapter.ts:133.
+  getOptionsChain?(underlying: string, expiration?: string): Promise<unknown>;
   readonly rateLimit?: { limit: number; remaining: number; resetAt: number };
   ping(): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }>;
   subscribeStatus?(handler: (s: ConnectionStatus) => void): () => void;

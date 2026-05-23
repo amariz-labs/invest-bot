@@ -169,6 +169,9 @@ export interface DataAdapter {
   streamQuotes(symbols: string[], handler: (q: Quote) => void): () => void;
   getSymbol(symbol: string): Promise<SymbolInfo>;
   search(query: string, opts?: { type?: SymbolInfo["type"]; limit?: number }): Promise<SymbolInfo[]>;
+  // Optional capabilities — provider-dependent. Matches design/code/DataAdapter.ts:133.
+  // biome-ignore lint/suspicious/noExplicitAny: optional capability, provider SDKs vary
+  getOptionsChain?(underlying: string, expiration?: string): Promise<any>;
   readonly rateLimit?: { limit: number; remaining: number; resetAt: number };
   ping(): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }>;
   // Subscribe to the adapter's connection-status feed. The handler MUST

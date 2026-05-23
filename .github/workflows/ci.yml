@@ -10,6 +10,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# `pull-requests: write` is required for the on-failure github-script step
+# in each job to comment the failing log on the open PR. Without this the
+# token is read-only and `issues.createComment` silently 403s.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   # Fast: runs our scripts/lint-skills.ts against the 35 SKILL.md files.
   # No installs needed — uses Node 22's native --experimental-strip-types.
@@ -22,7 +30,31 @@ jobs:
         with:
           node-version: '22'
       - name: Lint skills (strict)
-        run: node --experimental-strip-types scripts/lint-skills.ts --strict
+        id: skills
+        run: |
+          set -o pipefail
+          node --experimental-strip-types scripts/lint-skills.ts --strict 2>&1 | tee skills.log
+        continue-on-error: true
+      - name: Post failure comment + fail
+        if: steps.skills.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.existsSync('skills.log') ? fs.readFileSync('skills.log', 'utf8').slice(-6000) : '(no log)';
+            const body = `## CI failure: Lint SKILL.md\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n<details open><summary>Last 6KB of <code>node scripts/lint-skills.ts --strict</code></summary>\n\n\`\`\`\n${log}\n\`\`\`\n\n</details>`;
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
+            }
+            core.setFailed('skills-lint failed (see PR comment)');
 
   # web/ — Next.js 15 host. tsc --noEmit + Biome lint.
   web-check:
@@ -37,11 +69,56 @@ jobs:
         with:
           node-version: '22'
       - name: Install deps
-        run: npm install --no-fund --no-audit --legacy-peer-deps
+        id: install
+        run: |
+          set -o pipefail
+          npm install --no-fund --no-audit --legacy-peer-deps 2>&1 | tee install.log
+        continue-on-error: true
       - name: Typecheck
-        run: npx tsc --noEmit
+        id: typecheck
+        if: steps.install.outcome == 'success'
+        run: |
+          set -o pipefail
+          npx tsc --noEmit 2>&1 | tee tsc.log
+        continue-on-error: true
       - name: Biome lint
-        run: npm run lint
+        id: lint
+        if: steps.install.outcome == 'success'
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee lint.log
+        continue-on-error: true
+      - name: Post failure comment + fail
+        if: steps.install.outcome == 'failure' || steps.typecheck.outcome == 'failure' || steps.lint.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tail = (p) => fs.existsSync(`web/${p}`) ? fs.readFileSync(`web/${p}`, 'utf8').slice(-4000) : '(no log)';
+            const status = {
+              install: '${{ steps.install.outcome }}',
+              typecheck: '${{ steps.typecheck.outcome }}',
+              lint: '${{ steps.lint.outcome }}',
+            };
+            const sectionsRaw = [
+              ['install (npm install)', tail('install.log'), status.install],
+              ['typecheck (tsc --noEmit)', tail('tsc.log'), status.typecheck],
+              ['lint (biome check)', tail('lint.log'), status.lint],
+            ];
+            const sections = sectionsRaw.map(([name, body, outcome]) => `<details${outcome === 'failure' ? ' open' : ''}><summary>${outcome === 'failure' ? '❌' : (outcome === 'success' ? '✅' : '⏭️')} ${name}</summary>\n\n\`\`\`\n${body}\n\`\`\`\n\n</details>`).join('\n\n');
+            const body = `## CI failure: web typecheck + lint\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n${sections}`;
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
+            }
+            core.setFailed('web-check failed (see PR comment)');
 
   # mcp/ — MCP server. Just builds the TS to dist/.
   mcp-build:
@@ -56,6 +133,44 @@ jobs:
         with:
           node-version: '22'
       - name: Install deps
-        run: npm install --no-fund --no-audit --legacy-peer-deps
+        id: install
+        run: |
+          set -o pipefail
+          npm install --no-fund --no-audit --legacy-peer-deps 2>&1 | tee install.log
+        continue-on-error: true
       - name: Build
-        run: npm run build
+        id: build
+        if: steps.install.outcome == 'success'
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+        continue-on-error: true
+      - name: Post failure comment + fail
+        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tail = (p) => fs.existsSync(`mcp/${p}`) ? fs.readFileSync(`mcp/${p}`, 'utf8').slice(-4000) : '(no log)';
+            const status = {
+              install: '${{ steps.install.outcome }}',
+              build: '${{ steps.build.outcome }}',
+            };
+            const sectionsRaw = [
+              ['install (npm install)', tail('install.log'), status.install],
+              ['build (tsc)', tail('build.log'), status.build],
+            ];
+            const sections = sectionsRaw.map(([name, body, outcome]) => `<details${outcome === 'failure' ? ' open' : ''}><summary>${outcome === 'failure' ? '❌' : (outcome === 'success' ? '✅' : '⏭️')} ${name}</summary>\n\n\`\`\`\n${body}\n\`\`\`\n\n</details>`).join('\n\n');
+            const body = `## CI failure: mcp build\n\nCommit \`${context.sha.slice(0,7)}\` — [run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n${sections}`;
+            const prNumbers = new Set();
+            if (context.payload.pull_request?.number) prNumbers.add(context.payload.pull_request.number);
+            try {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha });
+              for (const pr of r.data) if (pr.state === 'open') prNumbers.add(pr.number);
+            } catch (e) { core.warning(`listPullRequestsAssociatedWithCommit failed: ${e.message}`); }
+            core.info(`posting failure comment to PRs: ${[...prNumbers].join(', ') || '(none found)'}`);
+            for (const number of prNumbers) {
+              try { await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body }); }
+              catch (e) { core.warning(`comment to PR #${number} failed: ${e.message}`); }
+            }
+            core.setFailed('mcp-build failed (see PR comment)');
