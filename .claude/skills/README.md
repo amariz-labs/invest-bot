@@ -1,6 +1,6 @@
 # `.claude/skills/` — Financial-Planner skill pack
 
-33 SKILL.md entries, each a thin wrapper that tells Claude *which* well-known open-source library to use, *when* to use it, and *what* output shape to produce. Nothing is auto-installed — the first time you invoke a skill, Claude will pip-install or `uvx` the underlying library into the active venv.
+35 SKILL.md entries, each a thin wrapper that tells Claude *which* well-known open-source library to use, *when* to use it, and *what* output shape to produce. Nothing is auto-installed — the first time you invoke a skill, Claude will pip-install or `uvx` the underlying library into the active venv.
 
 The pack is **trading-frequency neutral** — same skills work for day-trading equities, swing trading ETFs, options spreads, and longer-term portfolio rebalancing.
 
@@ -28,11 +28,12 @@ The pack is **trading-frequency neutral** — same skills work for day-trading e
 - [`sentiment-scan`](./sentiment-scan/SKILL.md) — FinBERT sentiment on RSS / headlines
 
 ### Options
+- [`iv-surface`](./iv-surface/SKILL.md) — IV rank, IV percentile (52w), term-structure slope, 25-delta skew, optional SVI surface
 - [`options-chain`](./options-chain/SKILL.md) — fetch/filter chain (moneyness, DTE, OI, IV) across Tradier / Polygon / Tastytrade
 - [`options-strategy-builder`](./options-strategy-builder/SKILL.md) — multi-leg strategies (verticals / iron condor / calendar / collar) with payoff + margin + broker-tier gate
 - [`greeks-monitor`](./greeks-monitor/SKILL.md) — live portfolio greeks (Δ Γ Θ ν) with threshold alerts
 
-### Equities-specific (added in scope expansion)
+### Equities-specific
 - [`equities-screener`](./equities-screener/SKILL.md) — Finviz-style screener with saved filter packs
 - [`etf-analyzer`](./etf-analyzer/SKILL.md) — expense ratio, overlap, sector exposure, factor tilt
 - [`daily-routine`](./daily-routine/SKILL.md) — pre-market / midday / EOD workflow orchestrator
@@ -45,6 +46,9 @@ The pack is **trading-frequency neutral** — same skills work for day-trading e
 ### Integrations
 - [`alert-webhook`](./alert-webhook/SKILL.md) — hardened TradingView-alert receiver wired to BrokerAdapter
 - [`broker-connect`](./broker-connect/SKILL.md) — scaffold a concrete BrokerAdapter for Alpaca / IBKR / Tradier / Tastytrade / Schwab
+
+### Dev tooling
+- [`code-map`](./code-map/SKILL.md) — wrapper around `codegraph` for symbol/import graphs before multi-file refactors
 
 ### Tax
 - [`tax-loss-harvest`](./tax-loss-harvest/SKILL.md) — wash-sale-aware loss harvesting + Schedule D / Form 8949 prep + cross-account IRA trap detection
