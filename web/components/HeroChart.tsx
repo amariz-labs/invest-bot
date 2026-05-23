@@ -122,7 +122,9 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
       });
       localChart = chart;
 
-      const priceSeries = chart.addSeries(lwc.CandlestickSeries, {
+      // Lightweight Charts v4 API: addCandlestickSeries / addHistogramSeries
+      // (v5 changed to addSeries(LineSeries, opts); package.json pins 4.2.3).
+      const priceSeries = chart.addCandlestickSeries({
         upColor: UP,
         downColor: DOWN,
         borderUpColor: UP,
@@ -135,7 +137,7 @@ export function HeroChart({ symbol, height = 420 }: HeroChartProps) {
         lastValueVisible: true,
       });
 
-      const volumeSeries = chart.addSeries(lwc.HistogramSeries, {
+      const volumeSeries = chart.addHistogramSeries({
         priceScaleId: "vol",
         priceFormat: { type: "volume" },
         color: VOL,

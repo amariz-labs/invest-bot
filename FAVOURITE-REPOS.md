@@ -19,7 +19,7 @@ Compiled from a parallel scout sweep (May 2026) of the user-pinned list at the t
 | [Fincept-Corporation/FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal) | Bloomberg-clone Qt6/C++ desktop terminal with embedded Python; 22.8k stars; AGPL-3.0 + commercial dual-license | **PARK + clean-room CLONE 3 patterns** | DO NOT copy code (AGPL is MIT-poison). Clean-room: (1) MCP server wrapping our skills, (2) data-hub topic naming, (3) agent-persona prompts. Cite as power-user reference in `design/EQUITIES-DASHBOARD.md` |
 | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) | Pre-indexed code knowledge graph for Claude Code / Codex / Cursor (TypeScript, MIT) | **LINK** + optional `code-map` skill wrapper | Cut Grep/Read token spend on the growing `web/` tree. Don't vendor — user installs |
 | [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi) | Alternative terminal coding agent (Bun/TypeScript, MIT) | **PARK (tangential)** | Competitor harness to Claude Code, not a library. Useful only as a design reference for hash-anchored edits and subagent patterns |
-| [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) | Curated plugin marketplace, 25 first-party + 15 vendor plugins, Apache-2.0 dominant | **LINK + ADOPT 1 today** | **Install `plugins/skill-creator` now** — it has an analyzer agent + eval harness for SKILL.md, a one-shot upgrade pass for our 33 skills. See §3 for the rest |
+| [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) | Curated plugin marketplace, 25 first-party + 15 vendor plugins, Apache-2.0 dominant | **LINK + ADOPT 1 today** | **Install `plugins/skill-creator` now** — it has an analyzer agent + eval harness for SKILL.md, a one-shot upgrade pass for our 35 skills. See §3 for the rest |
 
 ---
 
@@ -48,7 +48,7 @@ All install via `/plugin install <name>@claude-plugins-official`. Apache-2.0 dom
 
 | Plugin | Why install | Pairs with our |
 |---|---|---|
-| `skill-creator` | Analyzer agent + eval harness for SKILL.md. One-shot upgrade pass across our 33 skills | All skills |
+| `skill-creator` | Analyzer agent + eval harness for SKILL.md. One-shot upgrade pass across our 35 skills | All skills |
 | `code-review` | Multi-agent PR review with confidence scoring (operates on git diffs, not journal trades — no collision with `mistake-miner`) | Git workflow |
 | `pr-review-toolkit` | Sibling to `code-review` | Git workflow |
 | `commit-commands` | Git commit/push/PR helpers | Git workflow |

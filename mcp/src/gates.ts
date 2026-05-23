@@ -12,7 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { Account, OrderRequest } from "../../design/code/BrokerAdapter.js";
+import type { Account, OrderRequest } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Locate the repo root so data/state.yaml resolves no matter where the user

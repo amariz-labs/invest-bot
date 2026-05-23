@@ -329,4 +329,4 @@ Treat every third-party skill as untrusted code until reviewed.
 
 ## §12. The Skills Scaffolded in This Repo
 
-See [`.claude/skills/`](./.claude/skills) — 22 SKILL.md entries covering quant analytics, portfolio, strategy R&D, data, dashboards, and discipline. Each entry links back to the upstream open-source libraries listed in this catalog.
+See [`.claude/skills/`](./.claude/skills) — 35 SKILL.md entries covering quant analytics, portfolio, strategy R&D, options, tax, data, dashboards, TradingView/broker integration, code-graph indexing, and trading discipline. Each entry links back to the upstream open-source libraries listed in this catalog.
